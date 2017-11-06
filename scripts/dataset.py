@@ -3,9 +3,11 @@ import numpy as np
 from scipy import misc
 import os, sys
 import cv2
+from dataprocessing import pascalvoc
 
 
-DATA_PATH = "/home/khanhhung/deeplearning/data/Segdata"
+DATA_PATH = "/home/khanhhung/deeplearning/SemanticSegmentation/data/pascal_voc/raw"
+TENSORFLOW_DATA_PATH = "/home/khanhhung/deeplearning/SemanticSegmentation/data/pascal_voc/tensorflow"
 NUM_CLASS = 22
 
 
@@ -63,55 +65,13 @@ def __random_crop(batch, height, width):
     return batch
 
 
-class ColorLabelDecoder:
 
-    def __init__(self):
-        self.labelcolormap = dict()
-        with open(DATA_PATH + "/labelcolor.dat", "r") as file:
-            content = file.readlines()
-            content = [x.rstrip('\n') for x in content]
-            for x in content:
-                values = x.split('\t')
-                index = int(values[0])
-                values = values[1].split(' ')
-                self.labelcolormap[index] = (int(values[2]), int(values[1]), int(values[0]))
-        self.colorlabelmap = {x: y for y,x in self.labelcolormap.iteritems()}
-
-
-    def encode(self, image):
-        shape = np.shape(image)
-        en_img = np.zeros([shape[0], shape[1]])
-        # en_img = [color_map_r[tuple(x)] for x in en_img]
-        for i in range(shape[0]):
-            for j in range(shape[1]):
-                en_img[i][j] = self.colorlabelmap[tuple(image[i][j])]
-
-        return en_img
-
-    def decode(self, image):
-        shape = np.shape(image)
-
-        de_img = np.zeros([shape[0], shape[1], 3], 'uint8')
-        for i in range(shape[0]):
-            for j in range(shape[1]):
-                de_img[i][j] = self.labelcolormap[image[i][j]]
-
-        return de_img
-
-
-
-
-def one_hot_decode(img, num_class):
-    # shape = np.shape(img)
-    # one_hot_img = np.zeros([shape[0], shape[1], num_class])
-    one_hot_img = (np.arange(num_class) == img[:,:,None]).astype(int)
-    return one_hot_img
 
 
 class PascalVOCSegmentationDataSet(dm.RunTimeDataSet):
 
-    def __init__(self, index_path):
-        super(PascalVOCSegmentationDataSet, self).__init__()
+    def __init__(self, batch_size, index_path):
+        super(PascalVOCSegmentationDataSet, self).__init__(batch_size)
         self.__image_path = DATA_PATH + '/Images/'
         self.__label_path = DATA_PATH + '/Labels/'
         self.__index_path = index_path
@@ -128,18 +88,18 @@ class PascalVOCSegmentationDataSet(dm.RunTimeDataSet):
         self.size = np.size(self._index_list, 0)
 
 
-    def batch(self, batch_size):
-        assert batch_size > 0
+    def batch(self):
+        assert self._batch_size > 0
         images = []
         labels = []
-        index_end = self._current_index + batch_size
+        index_end = self._current_index + self._batch_size
         if (index_end >= self.size):
             index_end = self.size
 
 
         while self._current_index < index_end:
             index = self._index_list[self._current_index]
-            img = cv2.imread(self.__image_path + index + '.jpg')
+            img = np.array(cv2.imread(self.__image_path + index + '.jpg'), dtype=np.uint8)
             label = np.loadtxt(self.__label_path + index + '.txt', dtype=np.uint8)
             label[label == NUM_CLASS] = 0
             images.append(img)
@@ -154,8 +114,8 @@ class PascalVOCSegmentationDataSet(dm.RunTimeDataSet):
 
 
 # class PascalVOCSegmentationDataSet(dm.LoadTimeDataSet):
-#     def __init__(self, index_path):
-#         super(PascalVOCSegmentationDataSet, self).__init__()
+#     def __init__(self, batch_size, index_path):
+#         super(PascalVOCSegmentationDataSet, self).__init__(batch_size)
 #         self.__image_path = DATA_PATH + '/Images/'
 #         self.__label_path = DATA_PATH + '/Labels/'
 #         self.__index_path = index_path
@@ -183,6 +143,8 @@ class PascalVOCSegmentationDataSet(dm.RunTimeDataSet):
 
 
 
+
+
 if __name__ == "__main__":
     data = PascalVOCSegmentationDataSet(DATA_PATH + '/train.txt')
     data.load()
@@ -198,7 +160,7 @@ if __name__ == "__main__":
     cv2.imshow("img", img)
     cv2.waitKey(0)
 
-    decoder = ColorLabelDecoder()
+    decoder = pascalvoc.ColorLabelDecoder()
     cv2.imshow("img", decoder.decode(label))
     cv2.waitKey(0)
 
@@ -209,7 +171,6 @@ if __name__ == "__main__":
     cv2.imshow("img", img)
     cv2.waitKey(0)
 
-    decoder = ColorLabelDecoder()
     cv2.imshow("img", decoder.decode(label))
     cv2.waitKey(0)
 

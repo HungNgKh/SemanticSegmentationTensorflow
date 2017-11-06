@@ -64,3 +64,8 @@ target/
 
 # Matlab
 *.mat
+
+# Project data
+
+data/
+

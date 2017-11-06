@@ -7,8 +7,8 @@ import argparse
 import scipy.io
 
 
-PATH = "/home/khanhhung/deeplearning/saved/SEG/"
-MODEL_NAME = "fcn8"
+PATH = "/home/khanhhung/deeplearning/SemanticSegmentation/data/progress/"
+MODEL_NAME = "fcn8s"
 TRAINING_MODEL_PATH = PATH + MODEL_NAME + '/training/'
 BEST_MODEL_PATH = PATH + MODEL_NAME + '/best/'
 PERFORMANCE_PROGRESS_FILE = PATH + MODEL_NAME + '/performance_progress.mat'

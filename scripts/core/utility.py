@@ -5,20 +5,6 @@ import datamanager
 
 
 
-def hinge_loss(pred, labels):
-    true_classes = tf.argmax(labels, 1)
-    idx_flattened = tf.range(0, tf.shape(pred)[0]) * tf.shape(pred)[1] + tf.cast(true_classes, dtype=tf.int32)
-
-    true_scores = tf.cast(tf.gather(tf.reshape(pred, [-1]),
-                            idx_flattened), dtype=tf.float32)
-
-    L = tf.nn.relu((1 + tf.transpose(tf.nn.bias_add(tf.transpose(pred), tf.negative(true_scores)))) * (1 - labels))
-
-    final_loss = tf.reduce_mean(tf.reduce_sum(L,axis=1))
-    return final_loss
-
-
-
 
 class Trainer:
 
@@ -50,7 +36,7 @@ class Trainer:
         assert self._step != None
         return tf.train.global_step(self.session, self._step)
 
-    def validation(self, dataset, batch_size):
+    def validation(self, dataset):
         assert self.session != None
         assert self._step != None
         assert dataset.size > 0
@@ -59,9 +45,9 @@ class Trainer:
         val_loss = 0
         val_accuracy = 0
         val_iters = 0
-        dataset.reset_index()
+
         while True:
-            batch, end = dataset.batch(batch_size)
+            batch, end = dataset.batch(self.session)
             images = batch.x
             truths = batch.y
             loss, accuracy = self.session.run([self.loss, self.accuracy],
@@ -69,6 +55,7 @@ class Trainer:
             val_loss += loss
             val_accuracy += accuracy
             val_iters += 1
+            print val_iters
 
             if end == True:
                 break
@@ -82,7 +69,7 @@ class Trainer:
 
 
 
-    def train(self, dataset, batch_size, iters, augmentation_methods):
+    def train(self, dataset, iters, augmentation_methods):
 
         assert self.session != None
         assert self._step != None
@@ -92,8 +79,9 @@ class Trainer:
         train_accuracy = 0
         train_iters = 0
 
+
         for i in range(iters):
-            batch, end = dataset.batch(batch_size)
+            batch, end = dataset.batch(self.session)
             batch = datamanager.data_augment(batch, augmentation_methods)
             images = batch.x
             truths = batch.y
@@ -103,6 +91,7 @@ class Trainer:
             train_iters += 1
             if end == True:
                 dataset.shuffle()
+
 
         train_loss = train_loss / train_iters
         train_accuracy = train_accuracy / train_iters

@@ -8,8 +8,9 @@ import os
 import numpy as np
 
 
+
 BATCH_SIZE = 5
-STEP_TO_VALIDATION = 100
+STEP_TO_VALIDATION = 5
 
 
 def better_performance(new_accuracy, new_loss):
@@ -31,10 +32,10 @@ def better_performance(new_accuracy, new_loss):
 
 
 
-class ImageSegmentationTrainer(util.Trainer):
+class SemanticSegmentationTrainer(util.Trainer):
 
     def __init__(self, learning_rate):
-        super(ImageSegmentationTrainer, self).__init__(learning_rate)
+        super(SemanticSegmentationTrainer, self).__init__(learning_rate)
 
     def load_model(self):
         self.saver = fcn8.load(self.session)
@@ -65,6 +66,11 @@ class ImageSegmentationTrainer(util.Trainer):
         momentum_initializers = [var.initializer for var in tf.global_variables() if 'Momentum' in var.name]
 
         self.session.run(momentum_initializers)
+        self.session.run(tf.local_variables_initializer())
+        self.coord = tf.train.Coordinator()
+        self.threads = tf.train.start_queue_runners(coord=self.coord, sess=self.session)
+
+
 
 
     # def train(self):
@@ -82,15 +88,15 @@ class ImageSegmentationTrainer(util.Trainer):
 # saver = tf.train.Saver()
 
 if __name__ == "__main__":
-    train_data = dataset.PascalVOCSegmentationDataSet(dataset.DATA_PATH + '/train.txt')
-    train_data.load()
-    train_data.shuffle()
+    import core.datamanager as dm
+    from dataprocessing import pascalvoc
+    train_data = dm.TensorflowDataset(path=pascalvoc.PASCAL_VOC_PATH + 'tensorflow/train.tfrecords', batch_size=BATCH_SIZE,
+                                    image_shape=[256, 256, 3], truth_shape=[256, 256], epoch_size=1464, numthread=4)
 
-    val_data = dataset.PascalVOCSegmentationDataSet(dataset.DATA_PATH + '/val.txt')
-    val_data.load()
-    val_data.shuffle()
+    val_data = dm.TensorflowDataset(path=pascalvoc.PASCAL_VOC_PATH + 'tensorflow/validation.tfrecords', batch_size=BATCH_SIZE,
+                                    image_shape=[256, 256, 3], truth_shape=[256, 256], epoch_size=1464, numthread=4)
 
-    trainer = ImageSegmentationTrainer(learning_rate=1e-3)
+    trainer = SemanticSegmentationTrainer(learning_rate=1e-3)
     trainer.load_model()
 
     logger = util.TensorflowLogger()
@@ -104,7 +110,7 @@ if __name__ == "__main__":
     while True:
         print ("\n==========================================================")
         print ("Trained step : " + str(trainer.step) + ", training progress...")
-        result = trainer.train(train_data, BATCH_SIZE, STEP_TO_VALIDATION, augmentation_methods)
+        result = trainer.train(train_data, STEP_TO_VALIDATION, augmentation_methods)
         print ("--------------------------------------------------")
         print ("Iterations :" + str(STEP_TO_VALIDATION))
         print ("Loss = " + "{:.6f}".format(result['loss']))
@@ -112,7 +118,7 @@ if __name__ == "__main__":
 
         print ("--------------------------------------------------")
         print ("Validation processing...")
-        val_result = trainer.validation(val_data, batch_size=BATCH_SIZE)
+        val_result = trainer.validation(val_data)
         print ("--------------------------------------------------")
         print ("Validation loss = " + "{:.6f}".format(val_result['loss']))
         print ("Validation accuracy = " + "{:.6f}".format(val_result['accuracy']))

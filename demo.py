@@ -16,25 +16,6 @@ import sqlite3
 
 DATA_PATH = "/home/khanhhung/deeplearning/data/Segdata"
 
-def color_map(N=256, normalized=False):
-    def bitget(byteval, idx):
-        return ((byteval & (1 << idx)) != 0)
-
-    dtype = 'float32' if normalized else 'uint8'
-    cmap = np.zeros((N, 3), dtype=dtype)
-    for i in range(N):
-        r = g = b = 0
-        c = i
-        for j in range(8):
-            r = r | (bitget(c, 0) << 7-j)
-            g = g | (bitget(c, 1) << 7-j)
-            b = b | (bitget(c, 2) << 7-j)
-            c = c >> 3
-
-        cmap[i] = np.array([r, g, b])
-
-    cmap = cmap/255 if normalized else cmap
-    return cmap
 
 
 def color_map_viz():
@@ -110,21 +91,31 @@ def decode(img, color_map):
 
 
 if __name__ == "__main__":
-    # label = cv2.imread(dataset.DATA_PATH + '/JPEGImages/2007_002281.jpg')
+    import cv2
+    from scripts.core.datamanager import TensorflowDataset
+    from scripts.dataprocessing.pascalvoc import ColorLabelDecoder
+    sess = tf.Session()
+
+
+    dataset = TensorflowDataset(path="/home/khanhhung/deeplearning/SemanticSegmentation/data/pascal_voc/"+ 'tensorflow/train.tfrecords', batch_size=5,
+                                image_shape=[256, 256, 3], truth_shape=[256, 256], numthread=4)
+
+    coord = tf.train.Coordinator()
+    threads = tf.train.start_queue_runners(coord=coord, sess=sess)
+
+    for i in range(500):
+        batch = dataset.batch(sess)
+        print i
+
+    # img = batch.x[0]
+    # label = batch.y[0]
     #
-    # decoder = dataset.ColorLabelDecoder()
-    # # cv2.f
-    #
-    # cv2.imshow('img', label)
+    # decoder = ColorLabelDecoder()
+    # cv2.imshow('img', img)
     # cv2.waitKey(0)
     #
-    # resized = cv2.resize(label, (256, 256), interpolation=cv2.INTER_NEAREST)
-    # # resized.astype(np.uint8)
-    # cv2.imshow('img', resized)
+    # cv2.imshow('label', decoder.decode(label))
     # cv2.waitKey(0)
-    performance = scipy.io.loadmat(fcn8.PERFORMANCE_PROGRESS_FILE)
-    print performance
-    # cv2.imshow('img', decoder.decode(decoder.encode(resized)))
-    # cv2.waitKey(0)
-    #
-    # print np.array_equal(resized, decoder.decode(decoder.encode(resized)))
+
+    coord.request_stop()
+    coord.join(threads)

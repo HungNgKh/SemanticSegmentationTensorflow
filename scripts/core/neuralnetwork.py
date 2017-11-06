@@ -57,7 +57,17 @@ def transpose_conv2d(name, input, filter, stride, bias, output_shape):
     return conv
 
 
+def hinge_loss(pred, labels):
+    true_classes = tf.argmax(labels, 1)
+    idx_flattened = tf.range(0, tf.shape(pred)[0]) * tf.shape(pred)[1] + tf.cast(true_classes, dtype=tf.int32)
 
+    true_scores = tf.cast(tf.gather(tf.reshape(pred, [-1]),
+                            idx_flattened), dtype=tf.float32)
+
+    L = tf.nn.relu((1 + tf.transpose(tf.nn.bias_add(tf.transpose(pred), tf.negative(true_scores)))) * (1 - labels))
+
+    final_loss = tf.reduce_mean(tf.reduce_sum(L,axis=1))
+    return final_loss
 
 
 

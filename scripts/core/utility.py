@@ -22,6 +22,7 @@ class Trainer:
         self.ground_truth = None
         self._step = None
         self.var_logger = None
+        self.epoch_step = None
         self.session = tf.Session()
         assert self.session._closed == False
 
@@ -46,18 +47,20 @@ class Trainer:
         val_accuracy = 0
         val_iters = 0
 
-        while True:
-            batch, end = dataset.batch(self.session)
-            images = batch.x
-            truths = batch.y
-            loss, accuracy = self.session.run([self.loss, self.accuracy],
-                            feed_dict={self.input: images, self.ground_truth: truths, self.is_training: False})
-            val_loss += loss
-            val_accuracy += accuracy
-            val_iters += 1
-            print val_iters
+        dataset.reset(self.session)
 
-            if end == True:
+        while True:
+            batch = dataset.batch(self.session)
+            if batch is not None:
+                images = batch.x
+                truths = batch.y
+                loss, accuracy = self.session.run([self.loss, self.accuracy],
+                                feed_dict={self.input: images, self.ground_truth: truths, self.is_training: False})
+                val_loss += loss
+                val_accuracy += accuracy
+                val_iters += 1
+
+            else:
                 break
 
         var_log = self.session.run(self.var_logger)
@@ -69,7 +72,7 @@ class Trainer:
 
 
 
-    def train(self, dataset, iters, augmentation_methods):
+    def train(self, dataset, augmentation_methods):
 
         assert self.session != None
         assert self._step != None
@@ -79,22 +82,24 @@ class Trainer:
         train_accuracy = 0
         train_iters = 0
 
+        dataset.reset(self.session)
+        while True:
+            batch = dataset.batch(self.session)
+            if batch is not None:
+                batch = datamanager.data_augment(batch, augmentation_methods)
+                images = batch.x
+                truths = batch.y
+                _, loss, accuracy = self.session.run([self.train_op, self.loss, self.accuracy], feed_dict={self.input: images, self.ground_truth: truths, self.is_training: True})
+                train_loss += loss
+                train_accuracy += accuracy
+                train_iters += 1
 
-        for i in range(iters):
-            batch, end = dataset.batch(self.session)
-            batch = datamanager.data_augment(batch, augmentation_methods)
-            images = batch.x
-            truths = batch.y
-            _, loss, accuracy = self.session.run([self.train_op, self.loss, self.accuracy], feed_dict={self.input: images, self.ground_truth: truths, self.is_training: True})
-            train_loss += loss
-            train_accuracy += accuracy
-            train_iters += 1
-            if end == True:
-                dataset.shuffle()
-
+            else:
+                break
 
         train_loss = train_loss / train_iters
         train_accuracy = train_accuracy / train_iters
+        self.epoch_step += 1
 
         return {'loss': train_loss, 'accuracy': train_accuracy}
 

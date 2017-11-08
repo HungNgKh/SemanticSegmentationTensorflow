@@ -1,6 +1,6 @@
 from __future__ import print_function
 import core.utility as util
-import fcn8
+import fcn8s
 import scipy.io
 import tensorflow as tf
 import dataset
@@ -10,16 +10,16 @@ import numpy as np
 
 
 BATCH_SIZE = 5
-STEP_TO_VALIDATION = 5
+EPOCH_NUM = 30
 
 
 def better_performance(new_accuracy, new_loss):
-    assert os.path.exists(fcn8.PERFORMANCE_PROGRESS_FILE)
+    assert os.path.exists(fcn8s.PERFORMANCE_PROGRESS_FILE)
     assert new_accuracy >= 0
     assert new_accuracy <= 1
     assert new_loss >= 0
 
-    performance = scipy.io.loadmat(fcn8.PERFORMANCE_PROGRESS_FILE)
+    performance = scipy.io.loadmat(fcn8s.PERFORMANCE_PROGRESS_FILE)
     max_acc = -1
 
     if np.size(performance['accuracy']) > 0:
@@ -27,7 +27,7 @@ def better_performance(new_accuracy, new_loss):
 
     performance['accuracy'] = np.append(performance['accuracy'], new_accuracy)
     performance['loss'] = np.append(performance['loss'], new_loss)
-    scipy.io.savemat(fcn8.PERFORMANCE_PROGRESS_FILE, performance)
+    scipy.io.savemat(fcn8s.PERFORMANCE_PROGRESS_FILE, performance)
     return new_accuracy > max_acc
 
 
@@ -38,9 +38,9 @@ class SemanticSegmentationTrainer(util.Trainer):
         super(SemanticSegmentationTrainer, self).__init__(learning_rate)
 
     def load_model(self):
-        self.saver = fcn8.load(self.session)
+        self.saver, self.epoch_step = fcn8s.load(self.session)
 
-        for layer in fcn8.layer_list:
+        for layer in fcn8s.layer_list:
             with tf.name_scope(layer):
                 tf.summary.histogram('weight', self.session.graph.get_tensor_by_name(layer + '/w:0'))
                 tf.summary.histogram('bias', self.session.graph.get_tensor_by_name(layer + '/b:0'))
@@ -68,10 +68,13 @@ class SemanticSegmentationTrainer(util.Trainer):
         self.session.run(momentum_initializers)
         self.session.run(tf.local_variables_initializer())
         self.coord = tf.train.Coordinator()
-        self.threads = tf.train.start_queue_runners(coord=self.coord, sess=self.session)
+        self.__threads = tf.train.start_queue_runners(coord=self.coord, sess=self.session)
 
 
-
+    def close(self):
+        self.session.close()
+        self.coord.request_stop()
+        self.coord.join(self.__threads)
 
     # def train(self):
     #     for i in range(100):
@@ -90,14 +93,16 @@ class SemanticSegmentationTrainer(util.Trainer):
 if __name__ == "__main__":
     import core.datamanager as dm
     from dataprocessing import pascalvoc
-    train_data = dm.TensorflowDataset(path=pascalvoc.PASCAL_VOC_PATH + 'tensorflow/train.tfrecords', batch_size=BATCH_SIZE,
-                                    image_shape=[256, 256, 3], truth_shape=[256, 256], epoch_size=1464, numthread=4)
-
-    val_data = dm.TensorflowDataset(path=pascalvoc.PASCAL_VOC_PATH + 'tensorflow/validation.tfrecords', batch_size=BATCH_SIZE,
-                                    image_shape=[256, 256, 3], truth_shape=[256, 256], epoch_size=1464, numthread=4)
 
     trainer = SemanticSegmentationTrainer(learning_rate=1e-3)
     trainer.load_model()
+
+    train_data = dm.NewTFDataset(path=pascalvoc.PASCAL_VOC_PATH + 'tensorflow/train.tfrecords', batch_size=BATCH_SIZE,
+                                 image_shape=[256, 256, 3], truth_shape=[256, 256], epoch_size=1464, sess=trainer.session)
+
+    val_data = dm.NewTFDataset(path=pascalvoc.PASCAL_VOC_PATH + 'tensorflow/validation.tfrecords',
+                               batch_size=BATCH_SIZE,
+                               image_shape=[256, 256, 3], truth_shape=[256, 256], epoch_size=1449, sess=trainer.session)
 
     logger = util.TensorflowLogger()
 
@@ -107,12 +112,12 @@ if __name__ == "__main__":
         dataset.AUGMENTATION_METHODS['random_crop']
     ]
 
-    while True:
+    for i in range(EPOCH_NUM):
         print ("\n==========================================================")
         print ("Trained step : " + str(trainer.step) + ", training progress...")
-        result = trainer.train(train_data, STEP_TO_VALIDATION, augmentation_methods)
+        result = trainer.train(train_data, augmentation_methods)
         print ("--------------------------------------------------")
-        print ("Iterations :" + str(STEP_TO_VALIDATION))
+        print ("Epoch :" + str(trainer.epoch_step))
         print ("Loss = " + "{:.6f}".format(result['loss']))
         print ("Accuracy = " + "{:.6f}".format(result['accuracy']))
 
@@ -125,15 +130,18 @@ if __name__ == "__main__":
 
         print ("Saving progress. Please do not terminate the program...")
 
-        logger.log_scalar(result['loss'], trainer.step, fcn8.PATH + fcn8.MODEL_NAME + '/trainlog', trainer.session.graph, "loss")
-        logger.log_scalar(result['accuracy'], trainer.step, fcn8.PATH + fcn8.MODEL_NAME + '/trainlog', trainer.session.graph, "accuracy")
+        logger.log_scalar(result['loss'], trainer.step, fcn8s.PATH + fcn8s.MODEL_NAME + '/trainlog', trainer.session.graph, "loss")
+        logger.log_scalar(result['accuracy'], trainer.step, fcn8s.PATH + fcn8s.MODEL_NAME + '/trainlog', trainer.session.graph, "accuracy")
 
-        logger.log_scalar(val_result['loss'], trainer.step, fcn8.PATH + fcn8.MODEL_NAME + '/validationlog', trainer.session.graph, "loss")
-        logger.log_scalar(val_result['accuracy'], trainer.step, fcn8.PATH + fcn8.MODEL_NAME + '/validationlog',trainer.session.graph, "accuracy")
-        logger.log_sumary(val_result['variable_log'], trainer.step, fcn8.PATH + fcn8.MODEL_NAME + '/validationlog', trainer.session.graph)
+        logger.log_scalar(val_result['loss'], trainer.step, fcn8s.PATH + fcn8s.MODEL_NAME + '/validationlog', trainer.session.graph, "loss")
+        logger.log_scalar(val_result['accuracy'], trainer.step, fcn8s.PATH + fcn8s.MODEL_NAME + '/validationlog', trainer.session.graph, "accuracy")
+        logger.log_sumary(val_result['variable_log'], trainer.step, fcn8s.PATH + fcn8s.MODEL_NAME + '/validationlog', trainer.session.graph)
 
 
         better = better_performance(val_result['accuracy'], val_result['loss'])
-        trainer.saver.save(trainer.session, fcn8.TRAINING_MODEL_PATH + fcn8.MODEL_NAME, write_meta_graph=False)
+        trainer.saver.save(trainer.session, fcn8s.TRAINING_MODEL_PATH + fcn8s.MODEL_NAME, write_meta_graph=False)
         if better == True:
-            trainer.saver.save(trainer.session, fcn8.BEST_MODEL_PATH + fcn8.MODEL_NAME, write_meta_graph=False)
+            trainer.saver.save(trainer.session, fcn8s.BEST_MODEL_PATH + fcn8s.MODEL_NAME, write_meta_graph=False)
+
+    trainer.close()
+    print("\n\nTrain finished")

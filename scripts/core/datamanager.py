@@ -3,7 +3,8 @@ from __future__ import division
 import tensorflow as tf
 import numpy as np
 from abc import ABCMeta, abstractmethod
-import tensorflow as tf
+
+
 
 def data_augment(batch, methods):
     for method in methods:
@@ -170,6 +171,89 @@ class TensorflowDataset:
 
     def shuffle(self):
         pass
+
+
+
+class NewTFDataset:
+
+
+    def __init__(self, path, batch_size, image_shape, truth_shape, epoch_size, sess = tf.Session()):
+        assert sess._closed == False
+        self.path = path
+        self.__image_shape = image_shape
+        self.__batch_size = batch_size
+        self.__truth_shape = truth_shape
+        self.__steps_per_epoch = epoch_size // batch_size + int(epoch_size % batch_size > 0)
+        self.__step = 0
+        self.__size = epoch_size
+
+        self.__dataset = tf.data.TFRecordDataset([path])
+        # filename_queue = tf.train.string_input_producer([self.path], num_epochs=1)
+
+        self.__dataset = self.__dataset.map(self.__read_and_decode, num_parallel_calls=epoch_size)
+        self.__dataset = self.__dataset.shuffle(buffer_size=self.__batch_size * 3 + self.__size // 4)
+        data = self.__dataset.batch(self.__batch_size)
+        self.__iterator = data.make_initializable_iterator()
+        sess.run(self.__iterator.initializer)
+        # sess.run(self.__iterator.make_initializer(self.__dataset))
+
+
+
+    def __read_and_decode(self, example_proto):
+        # reader = tf.TFRecordReader()
+
+        # _, serialized_example = reader.read(filename_queue)
+
+        features = tf.parse_single_example(
+            example_proto,
+            # Defaults are not specified since both keys are required.
+            features={
+                'height': tf.FixedLenFeature([], tf.int64),
+                'width': tf.FixedLenFeature([], tf.int64),
+                'image_raw': tf.FixedLenFeature([], tf.string),
+                'mask_raw': tf.FixedLenFeature([], tf.string)
+            })
+
+
+        image = tf.decode_raw(features['image_raw'], tf.uint8)
+        annotation = tf.decode_raw(features['mask_raw'], tf.uint8)
+
+        image_shape = tf.stack(self.__image_shape)
+        annotation_shape = tf.stack(self.__truth_shape)
+
+        images = tf.reshape(image, image_shape)
+        annotations = tf.reshape(annotation, annotation_shape)
+
+
+        # images, annotations = tf.train.shuffle_batch([image, annotation], batch_size=self.__batch_size, allow_smaller_final_batch=True, capacity=125, num_threads=numthread, min_after_dequeue=100)
+
+        return images, annotations
+
+
+
+    def batch(self, sess = tf.Session()):
+        assert sess._closed == False
+        try:
+            self.__step += 1
+            x, y = sess.run(self.__iterator.get_next())
+            return Batch(x, y)
+
+        except tf.errors.OutOfRangeError:
+            self.__step = 0
+            return None
+
+
+    @property
+    def step(self):
+        return self.__step
+
+    @property
+    def size(self):
+        return self.__size
+
+
+    def reset(self, sess = tf.Session()):
+        sess.run(self.__iterator.initializer)
 
 
 

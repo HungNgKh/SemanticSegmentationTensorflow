@@ -9,9 +9,9 @@ class TestPascalVocTfrecord(unittest.TestCase):
 
     def __init__(self, *args, **kwargs):
         super(TestPascalVocTfrecord, self).__init__(*args, **kwargs)
-        raw_dataset = dataset.PascalVOCSegmentationDataSet(pascalvoc.PASCAL_VOC_PATH + '/raw/train.txt')
+        raw_dataset = dataset.PascalVOCSegmentationDataSet(batch_size=5, index_path=pascalvoc.PASCAL_VOC_PATH + '/raw/train.txt')
         raw_dataset.load()
-        self.raw_data, _ = raw_dataset.batch(5)
+        self.raw_data, _ = raw_dataset.batch()
         self.record = tf.python_io.tf_record_iterator(path=pascalvoc.PASCAL_VOC_PATH + '/tensorflow/train.tfrecords')
 
 

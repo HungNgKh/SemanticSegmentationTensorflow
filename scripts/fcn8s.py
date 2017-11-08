@@ -5,6 +5,7 @@ import tensorflow.contrib.layers as layer
 import dataset
 import argparse
 import scipy.io
+import numpy as np
 
 
 PATH = "/home/khanhhung/deeplearning/SemanticSegmentation/data/progress/"
@@ -84,6 +85,11 @@ def __build():
                                               initializer=layer.xavier_initializer())
         variables_dict['conv3_2_b'] = tf.get_variable(name='b', shape=[128], initializer=tf.zeros_initializer)
 
+    with tf.variable_scope('conv3_3'):
+        variables_dict['conv3_3_w'] = tf.get_variable(name='w', shape=[3, 3, 128, 128],
+                                                      initializer=layer.xavier_initializer())
+        variables_dict['conv3_3_b'] = tf.get_variable(name='b', shape=[128], initializer=tf.zeros_initializer)
+
 
 
     with tf.variable_scope('conv4_1'):
@@ -96,6 +102,11 @@ def __build():
                                               initializer=layer.xavier_initializer())
         variables_dict['conv4_2_b'] = tf.get_variable(name='b', shape=[256], initializer=tf.zeros_initializer)
 
+    with tf.variable_scope('conv4_3'):
+        variables_dict['conv4_3_w'] = tf.get_variable(name='w', shape=[3, 3, 256, 256],
+                                              initializer=layer.xavier_initializer())
+        variables_dict['conv4_3_b'] = tf.get_variable(name='b', shape=[256], initializer=tf.zeros_initializer)
+
 
 
     with tf.variable_scope('conv5_1'):
@@ -107,6 +118,11 @@ def __build():
         variables_dict['conv5_2_w'] = tf.get_variable(name='w', shape=[3, 3, 256, 256],
                                               initializer=layer.xavier_initializer())
         variables_dict['conv5_2_b'] = tf.get_variable(name='b', shape=[256], initializer=tf.zeros_initializer)
+
+    with tf.variable_scope('conv5_3'):
+        variables_dict['conv5_3_w'] = tf.get_variable(name='w', shape=[3, 3, 256, 256],
+                                                      initializer=layer.xavier_initializer())
+        variables_dict['conv5_3_b'] = tf.get_variable(name='b', shape=[256], initializer=tf.zeros_initializer)
 
 
 
@@ -176,50 +192,71 @@ def __build():
 
 
     conv1_1 = nn.conv2d("conv1_1", input, variables_dict['conv1_1_w'], 1, variables_dict['conv1_1_b'])
+    conv1_1 = nn.batch_norm(conv1_1, is_training, "bm1")
     relu1_1 = tf.nn.relu(conv1_1, "relu1_1")
     conv1_2 = nn.conv2d("conv1_2", relu1_1, variables_dict['conv1_2_w'], 1, variables_dict['conv1_2_b'])
+    conv1_2 = nn.batch_norm(conv1_2, is_training, "bm2")
     relu1_2 = tf.nn.relu(conv1_2, "relu1_2")
     pool1 = nn.max_pool("pool1", relu1_2, 2)
 
 
 
     conv2_1 = nn.conv2d("conv2_1", pool1, variables_dict['conv2_1_w'], 1, variables_dict['conv2_1_b'])
+    conv2_1 = nn.batch_norm(conv2_1, is_training, "bm3")
     relu2_1 = tf.nn.relu(conv2_1, "relu2_1")
     conv2_2 = nn.conv2d("conv2_2", relu2_1, variables_dict['conv2_2_w'], 1, variables_dict['conv2_2_b'])
+    conv2_2 = nn.batch_norm(conv2_2, is_training, "bm4")
     relu2_2 = tf.nn.relu(conv2_2, "relu2_2")
     pool2 = nn.max_pool("pool2", relu2_2, 2)
 
 
 
     conv3_1 = nn.conv2d("conv3_1", pool2, variables_dict['conv3_1_w'], 1, variables_dict['conv3_1_b'])
+    conv3_1 = nn.batch_norm(conv3_1, is_training, "bm5")
     relu3_1 = tf.nn.relu(conv3_1, "relu3_1")
     conv3_2 = nn.conv2d("conv3_2", relu3_1, variables_dict['conv3_2_w'], 1, variables_dict['conv3_2_b'])
+    conv3_2 = nn.batch_norm(conv3_2, is_training, "bm6")
     relu3_2 = tf.nn.relu(conv3_2, "relu3_2")
-    pool3 = nn.max_pool("pool3", relu3_2, 2)
+    conv3_3 = nn.conv2d("conv3_2", relu3_2, variables_dict['conv3_3_w'], 1, variables_dict['conv3_3_b'])
+    conv3_3 = nn.batch_norm(conv3_3, is_training, "bm7")
+    relu3_3 = tf.nn.relu(conv3_3, "relu3_3")
+    pool3 = nn.max_pool("pool3", relu3_3, 2)
 
 
 
     conv4_1 = nn.conv2d("conv4_1", pool3, variables_dict['conv4_1_w'], 1, variables_dict['conv4_1_b'])
+    conv4_1 = nn.batch_norm(conv4_1, is_training, "bm8")
     relu4_1 = tf.nn.relu(conv4_1, "relu4_1")
     conv4_2 = nn.conv2d("conv4_2", relu4_1, variables_dict['conv4_2_w'], 1, variables_dict['conv4_2_b'])
+    conv4_2 = nn.batch_norm(conv4_2, is_training, "bm9")
     relu4_2 = tf.nn.relu(conv4_2, "relu4_2")
-    pool4 = nn.max_pool("pool4", relu4_2, 2)
+    conv4_3 = nn.conv2d("conv4_2", relu4_2, variables_dict['conv4_3_w'], 1, variables_dict['conv4_3_b'])
+    conv4_3 = nn.batch_norm(conv4_3, is_training, "bm10")
+    relu4_3 = tf.nn.relu(conv4_3, "relu4_3")
+    pool4 = nn.max_pool("pool4", relu4_3, 2)
 
 
 
     conv5_1 = nn.conv2d("conv5_1", pool4, variables_dict['conv5_1_w'], 1, variables_dict['conv5_1_b'])
+    conv5_1 = nn.batch_norm(conv5_1, is_training, "bm11")
     relu5_1 = tf.nn.relu(conv5_1, "relu5_1")
     conv5_2 = nn.conv2d("conv5_2", relu5_1, variables_dict['conv5_2_w'], 1, variables_dict['conv5_2_b'])
+    conv5_2 = nn.batch_norm(conv5_2, is_training, "bm12")
     relu5_2 = tf.nn.relu(conv5_2, "relu5_2")
-    pool5 = nn.max_pool("pool5", relu5_2, 2)
+    conv5_3 = nn.conv2d("conv5_2", relu5_2, variables_dict['conv5_3_w'], 1, variables_dict['conv5_3_b'])
+    conv5_3 = nn.batch_norm(conv5_3, is_training, "bm13")
+    relu5_3 = tf.nn.relu(conv5_3, "relu5_2")
+    pool5 = nn.max_pool("pool5", relu5_3, 2)
 
 
 
     conv6 = nn.conv2d("conv6", pool5, variables_dict['conv6_w'], 1, variables_dict['conv6_b'])
     relu6 = tf.nn.relu(conv6, "relu6")
+    relu6 = nn.dropout(relu6, is_training, 0.5)
 
     conv7 = nn.conv2d("conv7", relu6, variables_dict['conv7_w'], 1, variables_dict['conv7_b'])
     relu7 = tf.nn.relu(conv7, "relu7")
+    relu7 = nn.dropout(relu7, is_training, 0.5)
 
     conv8 = nn.conv2d("conv8", relu7, variables_dict['conv8_w'], 1, variables_dict['conv8_b'])
     relu8 = tf.nn.relu(conv8, "relu8")
@@ -254,9 +291,9 @@ def __build():
         saver.save(sess, BEST_MODEL_PATH + MODEL_NAME)
 
     if os.path.exists(TRAINING_MODEL_PATH + MODEL_NAME + '.meta'):
-        print "Successfully create fcn8 neural network model"
+        print "Successfully create " + MODEL_NAME + " neural network model"
     else:
-        print "Failed to create fcn8 neural network model"
+        print "Failed to create " + MODEL_NAME + " neural network model"
         return
 
     performances = {'loss': [], 'accuracy': []}
@@ -266,10 +303,17 @@ def __build():
 
 def load(sess):
 
+    def trained_epoch_num():
+        if os.path.exists(PERFORMANCE_PROGRESS_FILE):
+            performance = scipy.io.loadmat(PERFORMANCE_PROGRESS_FILE)
+            return np.size(performance['accuracy'], 0)
+        else:
+            return 0
+
     if os.path.exists(TRAINING_MODEL_PATH + MODEL_NAME + '.meta'):
         new_saver = tf.train.new_saver = tf.train.import_meta_graph(TRAINING_MODEL_PATH  + MODEL_NAME + '.meta')
         new_saver.restore(sess, tf.train.latest_checkpoint(TRAINING_MODEL_PATH))
-        return new_saver
+        return new_saver, trained_epoch_num()
 
     else:
         print "Model not found!"
@@ -300,7 +344,7 @@ def __main():
         'delete' : __clear
     }
 
-    parser = argparse.ArgumentParser(description="Setup fcn8 neural network")
+    parser = argparse.ArgumentParser(description="Setup " + MODEL_NAME + " neural network")
     parser.add_argument('command', choices=function_map.keys())
 
     args = parser.parse_args()

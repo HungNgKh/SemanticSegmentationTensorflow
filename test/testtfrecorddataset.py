@@ -1,7 +1,8 @@
+from __future__ import division
 import unittest
 import tensorflow as tf
 import numpy as np
-from scripts.core.datamanager import Batch
+# from scripts.core.datamanager import Batch
 from scripts.dataprocessing import pascalvoc
 from scripts.core.datamanager import TensorflowDataset
 
@@ -20,7 +21,7 @@ class TestTfrecordDataset(unittest.TestCase):
         coord = tf.train.Coordinator()
         threads = tf.train.start_queue_runners(coord=coord, sess=self.sess)
 
-        batch = dataset.batch(self.sess)
+        batch, _ = dataset.batch(self.sess)
 
         img_shape = np.shape(batch.x)
         mask_shape = np.shape(batch.y)
@@ -41,11 +42,30 @@ class TestTfrecordDataset(unittest.TestCase):
         coord = tf.train.Coordinator()
         threads = tf.train.start_queue_runners(coord=coord, sess=self.sess)
 
-        batch = dataset.batch(self.sess)
+        batch, _ = dataset.batch(self.sess)
 
         decoder = pascalvoc.ColorLabelDecoder()
         for i in range(5):
             np.testing.assert_equal(batch.y[i], decoder.encode(decoder.decode(batch.y[i])))
+
+        coord.request_stop()
+        coord.join(threads)
+
+
+    def test_epoch_size(self):
+        dataset = TensorflowDataset(path=pascalvoc.PASCAL_VOC_PATH + 'tensorflow/train.tfrecords', batch_size=5,
+                                    image_shape=[256, 256, 3], truth_shape=[256, 256], epoch_size=1464, numthread=4)
+
+        coord = tf.train.Coordinator()
+        threads = tf.train.start_queue_runners(coord=coord, sess=self.sess)
+        self.sess.run(tf.global_variables_initializer())
+        # self.sess.run()
+
+        for i in range(293):
+            batch, _ = dataset.batch(self.sess)
+            self.assertEqual(np.size(batch.x, 0), 5)
+            self.assertEqual(np.size(batch.y, 0), 5)
+
 
         coord.request_stop()
         coord.join(threads)

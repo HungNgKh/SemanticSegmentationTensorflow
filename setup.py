@@ -1,5 +1,5 @@
 import tensorflow as tf
-import scripts.fcn8 as fcn8
+import scripts.fcn8s as fcn8
 import tensorflow.contrib.layers as layer
 
 

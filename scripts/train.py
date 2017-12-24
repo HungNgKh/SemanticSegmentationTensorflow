@@ -1,6 +1,6 @@
-from __future__ import print_function
+from __future__ import print_function, division
 import core.utility as util
-import fcn8s
+import fcn8s_vgg16
 import scipy.io
 import tensorflow as tf
 import dataset
@@ -10,71 +10,81 @@ import numpy as np
 
 
 BATCH_SIZE = 5
-EPOCH_NUM = 30
+EPOCH_NUM = 100
+
+START_MOMENTUM = 0.5
+MAX_MOMENTUM = 0.9
+MOMENTUM_INCREASE = 0.05
+MOMENTUM_UP_EPOCH_STEP = 50
 
 
-def better_performance(new_accuracy, new_loss):
-    assert os.path.exists(fcn8s.PERFORMANCE_PROGRESS_FILE)
-    assert new_accuracy >= 0
-    assert new_accuracy <= 1
-    assert new_loss >= 0
+def better_performance(result):
+    assert os.path.exists(fcn8s_vgg16.PERFORMANCE_PROGRESS_FILE)
 
-    performance = scipy.io.loadmat(fcn8s.PERFORMANCE_PROGRESS_FILE)
+    assert result['pixel_accuracy'] >= 0
+    assert result['pixel_accuracy'] <= 1
+
+    assert result['mean_accuracy'] >= 0
+    assert result['mean_accuracy'] <= 1
+
+    assert result['meanIU'] >= 0
+    assert result['meanIU'] <= 1
+
+    assert result['loss'] >= 0
+
+    performance = scipy.io.loadmat(fcn8s_vgg16.PERFORMANCE_PROGRESS_FILE)
     max_acc = -1
 
-    if np.size(performance['accuracy']) > 0:
-        max_acc = np.max(performance['accuracy'])
+    if np.size(performance['meanIU']) > 0:
+        max_acc = np.max(performance['meanIU'])
 
-    performance['accuracy'] = np.append(performance['accuracy'], new_accuracy)
-    performance['loss'] = np.append(performance['loss'], new_loss)
-    scipy.io.savemat(fcn8s.PERFORMANCE_PROGRESS_FILE, performance)
-    return new_accuracy > max_acc
+    performance['pixel_accuracy'] = np.append(performance['pixel_accuracy'], result['pixel_accuracy'])
+    performance['mean_accuracy'] = np.append(performance['mean_accuracy'], result['mean_accuracy'])
+    performance['meanIU'] = np.append(performance['meanIU'], result['meanIU'])
+    performance['loss'] = np.append(performance['loss'], result['loss'])
+    scipy.io.savemat(fcn8s_vgg16.PERFORMANCE_PROGRESS_FILE, performance)
+
+    return result['meanIU'] > max_acc
 
 
 
 class SemanticSegmentationTrainer(util.Trainer):
 
-    def __init__(self, learning_rate):
-        super(SemanticSegmentationTrainer, self).__init__(learning_rate)
+    def __init__(self):
+        super(SemanticSegmentationTrainer, self).__init__()
 
     def load_model(self):
-        self.saver, self.epoch_step = fcn8s.load(self.session)
+        self.saver, self.epoch_step = fcn8s_vgg16.load(self.session)
 
-        for layer in fcn8s.layer_list:
+
+        for layer in fcn8s_vgg16.layer_list:
             with tf.name_scope(layer):
-                tf.summary.histogram('weight', self.session.graph.get_tensor_by_name(layer + '/w:0'))
-                tf.summary.histogram('bias', self.session.graph.get_tensor_by_name(layer + '/b:0'))
+                tf.summary.histogram('weights', self.session.graph.get_tensor_by_name(layer + '/weights:0'))
+                # tf.summary.histogram('biases', self.session.graph.get_tensor_by_name(layer + '/biases:0'))
+
 
         self.var_logger = tf.summary.merge_all()
 
         self.input = self.session.graph.get_tensor_by_name('input:0')
-        self.is_training = self.session.graph.get_tensor_by_name('is_training:0')
-        self.predict = self.session.graph.get_tensor_by_name('deconv_3:0')
+        self.train_phase = self.session.graph.get_tensor_by_name('train_phase:0')
+        self.output = self.session.graph.get_tensor_by_name('upscore8_1:0')
         self._step = self.session.graph.get_tensor_by_name('global_step:0')
+        loss = self.session.graph.get_tensor_by_name('loss:0')
         # sess.run(tf.global_variables_initializer())
 
-        self.ground_truth = tf.placeholder(tf.int64, shape=[None, None, None], name='truth')
-
-        self.loss = tf.reduce_mean(
-            tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.ground_truth, logits=self.predict, name="Loss"))
-        corrects = tf.equal(tf.argmax(self.predict, 3), self.ground_truth)
-        self.accuracy = tf.reduce_mean(tf.cast(corrects, tf.float32))
-
-        self.train_op = tf.train.MomentumOptimizer(learning_rate=self.learning_rate, momentum=tf.constant(0.9),
-                                               use_nesterov=True).minimize(self.loss, self._step)
-
-        momentum_initializers = [var.initializer for var in tf.global_variables() if 'Momentum' in var.name]
-
-        self.session.run(momentum_initializers)
+        self.ground_truth = self.session.graph.get_tensor_by_name('ground_truth:0')
+        self.train_op = self.session.graph.get_tensor_by_name('train_op:0')
+        self.momentum = trainer.session.graph.get_tensor_by_name("momentum:0")
+        self.metrics = util.MetricsCalculator(self.session, labels=self.ground_truth, predicts=tf.argmax(self.output, 3), loss=loss, num_classes=dataset.NUM_CLASS, name="Metrics")
         self.session.run(tf.local_variables_initializer())
-        self.coord = tf.train.Coordinator()
-        self.__threads = tf.train.start_queue_runners(coord=self.coord, sess=self.session)
+        # self.coord = tf.train.Coordinator()
+        # self.__threads = tf.train.start_queue_runners(coord=self.coord, sess=self.session)
 
 
     def close(self):
+        # self.coord.request_stop()
+        # self.coord.join(self.__threads)
         self.session.close()
-        self.coord.request_stop()
-        self.coord.join(self.__threads)
 
     # def train(self):
     #     for i in range(100):
@@ -91,18 +101,19 @@ class SemanticSegmentationTrainer(util.Trainer):
 # saver = tf.train.Saver()
 
 if __name__ == "__main__":
-    import core.datamanager as dm
-    from dataprocessing import pascalvoc
 
-    trainer = SemanticSegmentationTrainer(learning_rate=1e-3)
+
+    trainer = SemanticSegmentationTrainer()
     trainer.load_model()
 
-    train_data = dm.NewTFDataset(path=pascalvoc.PASCAL_VOC_PATH + 'tensorflow/train.tfrecords', batch_size=BATCH_SIZE,
-                                 image_shape=[256, 256, 3], truth_shape=[256, 256], epoch_size=1464, sess=trainer.session)
+    momentum = min(START_MOMENTUM + (trainer.epoch_step // MOMENTUM_UP_EPOCH_STEP) * MOMENTUM_INCREASE, MAX_MOMENTUM)
 
-    val_data = dm.NewTFDataset(path=pascalvoc.PASCAL_VOC_PATH + 'tensorflow/validation.tfrecords',
-                               batch_size=BATCH_SIZE,
-                               image_shape=[256, 256, 3], truth_shape=[256, 256], epoch_size=1449, sess=trainer.session)
+
+    train_data = dataset.PascalVOCSegmentationDataSet(batch_size=BATCH_SIZE, index_path=dataset.DATA_PATH + '/train.txt')
+    train_data.load()
+
+    val_data = dataset.PascalVOCSegmentationDataSet(batch_size=BATCH_SIZE,index_path=dataset.DATA_PATH + '/val.txt')
+    val_data.load()
 
     logger = util.TensorflowLogger()
 
@@ -115,33 +126,48 @@ if __name__ == "__main__":
     for i in range(EPOCH_NUM):
         print ("\n==========================================================")
         print ("Trained step : " + str(trainer.step) + ", training progress...")
-        result = trainer.train(train_data, augmentation_methods)
-        print ("--------------------------------------------------")
-        print ("Epoch :" + str(trainer.epoch_step))
-        print ("Loss = " + "{:.6f}".format(result['loss']))
-        print ("Accuracy = " + "{:.6f}".format(result['accuracy']))
+        result = trainer.train(train_data, augmentation_methods, momentum)
 
         print ("--------------------------------------------------")
-        print ("Validation processing...")
+        print ("Epoch : " + str(trainer.epoch_step))
+        print ("Loss = " + "{:.6f}".format(result['loss']))
+        print ("Pixel accuracy = " + "{:.6f}".format(result['pixel_accuracy']))
+        print ("Mean accuracy = " + "{:.6f}".format(result['mean_accuracy']))
+        print ("Mean IU = " + "{:.6f}".format(result['meanIU']))
+        print ("Train time = " + str(result['train_time']) + " s")
+
+        print ("--------------------------------------------------")
+        print ("Validation progress...")
         val_result = trainer.validation(val_data)
         print ("--------------------------------------------------")
         print ("Validation loss = " + "{:.6f}".format(val_result['loss']))
-        print ("Validation accuracy = " + "{:.6f}".format(val_result['accuracy']))
+        print ("Validation pixel accuracy = " + "{:.6f}".format(val_result['pixel_accuracy']))
+        print ("Validation mean accuracy = " + "{:.6f}".format(val_result['mean_accuracy']))
+        print ("Validation mean IU = " + "{:.6f}".format(val_result['meanIU']))
 
         print ("Saving progress. Please do not terminate the program...")
 
-        logger.log_scalar(result['loss'], trainer.step, fcn8s.PATH + fcn8s.MODEL_NAME + '/trainlog', trainer.session.graph, "loss")
-        logger.log_scalar(result['accuracy'], trainer.step, fcn8s.PATH + fcn8s.MODEL_NAME + '/trainlog', trainer.session.graph, "accuracy")
-
-        logger.log_scalar(val_result['loss'], trainer.step, fcn8s.PATH + fcn8s.MODEL_NAME + '/validationlog', trainer.session.graph, "loss")
-        logger.log_scalar(val_result['accuracy'], trainer.step, fcn8s.PATH + fcn8s.MODEL_NAME + '/validationlog', trainer.session.graph, "accuracy")
-        logger.log_sumary(val_result['variable_log'], trainer.step, fcn8s.PATH + fcn8s.MODEL_NAME + '/validationlog', trainer.session.graph)
+        logger.log_scalar(result['loss'], trainer.epoch_step, fcn8s_vgg16.PATH + fcn8s_vgg16.MODEL_NAME + '/trainlog', trainer.session.graph, "loss")
+        logger.log_scalar(result['pixel_accuracy'], trainer.epoch_step, fcn8s_vgg16.PATH + fcn8s_vgg16.MODEL_NAME + '/trainlog', trainer.session.graph, 'pixel_accuracy')
+        logger.log_scalar(result['mean_accuracy'], trainer.epoch_step, fcn8s_vgg16.PATH + fcn8s_vgg16.MODEL_NAME + '/trainlog', trainer.session.graph, 'mean_accuracy')
+        logger.log_scalar(result['meanIU'], trainer.epoch_step, fcn8s_vgg16.PATH + fcn8s_vgg16.MODEL_NAME + '/trainlog', trainer.session.graph, 'meanIU')
 
 
-        better = better_performance(val_result['accuracy'], val_result['loss'])
-        trainer.saver.save(trainer.session, fcn8s.TRAINING_MODEL_PATH + fcn8s.MODEL_NAME, write_meta_graph=False)
+        logger.log_scalar(val_result['loss'], trainer.epoch_step, fcn8s_vgg16.PATH + fcn8s_vgg16.MODEL_NAME + '/validationlog', trainer.session.graph, "loss")
+        logger.log_scalar(val_result['pixel_accuracy'], trainer.epoch_step, fcn8s_vgg16.PATH + fcn8s_vgg16.MODEL_NAME + '/validationlog', trainer.session.graph, 'pixel_accuracy')
+        logger.log_scalar(val_result['mean_accuracy'], trainer.epoch_step, fcn8s_vgg16.PATH + fcn8s_vgg16.MODEL_NAME + '/validationlog', trainer.session.graph, 'mean_accuracy')
+        logger.log_scalar(val_result['meanIU'], trainer.epoch_step, fcn8s_vgg16.PATH + fcn8s_vgg16.MODEL_NAME + '/validationlog', trainer.session.graph, 'meanIU')
+        logger.log_sumary(val_result['variable_log'], trainer.epoch_step, fcn8s_vgg16.PATH + fcn8s_vgg16.MODEL_NAME + '/validationlog', trainer.session.graph)
+
+
+        better = better_performance(val_result)
+        trainer.saver.save(trainer.session, fcn8s_vgg16.TRAINING_MODEL_PATH + fcn8s_vgg16.MODEL_NAME, write_meta_graph=False)
         if better == True:
-            trainer.saver.save(trainer.session, fcn8s.BEST_MODEL_PATH + fcn8s.MODEL_NAME, write_meta_graph=False)
+            trainer.saver.save(trainer.session, fcn8s_vgg16.BEST_MODEL_PATH + fcn8s_vgg16.MODEL_NAME, write_meta_graph=False)
+
+        if trainer.epoch_step % MOMENTUM_UP_EPOCH_STEP == 0:
+            momentum = min(momentum + MOMENTUM_INCREASE, MAX_MOMENTUM)
+
 
     trainer.close()
     print("\n\nTrain finished")

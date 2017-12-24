@@ -84,13 +84,13 @@ def raw_to_tfrecord():
     def _int64_feature(value):
         return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))
 
-    raw_file = PASCAL_VOC_PATH + 'raw/val.txt'
+    raw_file = PASCAL_VOC_PATH + 'raw/train.txt'
 
     with open(raw_file, 'r') as file:
         index_list = [x.rstrip('\n') for x in file.readlines()]
 
 
-    tfrecords_filename = PASCAL_VOC_PATH + 'tensorflow/validation.tfrecords'
+    tfrecords_filename = PASCAL_VOC_PATH + 'tensorflow/train.tfrecords'
 
     writer = tf.python_io.TFRecordWriter(tfrecords_filename)
 

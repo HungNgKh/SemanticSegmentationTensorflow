@@ -1,14 +1,15 @@
 import core.datamanager as dm
 import numpy as np
 from scipy import misc
+import tensorflow as tf
 import os, sys
 import cv2
 from dataprocessing import pascalvoc
 
 
-DATA_PATH = "/home/khanhhung/deeplearning/SemanticSegmentation/data/pascal_voc/raw"
-TENSORFLOW_DATA_PATH = "/home/khanhhung/deeplearning/SemanticSegmentation/data/pascal_voc/tensorflow"
-NUM_CLASS = 22
+DATA_PATH = os.path.dirname(os.path.abspath(__file__)) + "/../data/pascal_voc/raw"
+TENSORFLOW_DATA_PATH = os.path.dirname(os.path.abspath(__file__)) + "/../data/pascal_voc/tensorflow"
+NUM_CLASS = 21
 
 
 
@@ -67,7 +68,6 @@ def __random_crop(batch, height, width):
 
 
 
-
 class PascalVOCSegmentationDataSet(dm.RunTimeDataSet):
 
     def __init__(self, batch_size, index_path):
@@ -92,6 +92,10 @@ class PascalVOCSegmentationDataSet(dm.RunTimeDataSet):
         assert self._batch_size > 0
         images = []
         labels = []
+
+        if self._current_index >= self.size:
+            return
+
         index_end = self._current_index + self._batch_size
         if (index_end >= self.size):
             index_end = self.size
@@ -99,18 +103,15 @@ class PascalVOCSegmentationDataSet(dm.RunTimeDataSet):
 
         while self._current_index < index_end:
             index = self._index_list[self._current_index]
-            img = np.array(cv2.imread(self.__image_path + index + '.jpg'), dtype=np.uint8)
+            img = np.array(cv2.imread(self.__image_path + index + '.jpg'), dtype=np.float64)
             label = np.loadtxt(self.__label_path + index + '.txt', dtype=np.uint8)
             label[label == NUM_CLASS] = 0
             images.append(img)
             labels.append(label)
             self._current_index += 1
 
-        if(self._current_index >= self.size):
-            self._current_index = 0
-            return dm.Batch(images, labels), True
-        else:
-            return dm.Batch(images, labels), False
+        return dm.Batch(images, labels)
+
 
 
 # class PascalVOCSegmentationDataSet(dm.LoadTimeDataSet):
@@ -146,14 +147,12 @@ class PascalVOCSegmentationDataSet(dm.RunTimeDataSet):
 
 
 if __name__ == "__main__":
-    data = PascalVOCSegmentationDataSet(DATA_PATH + '/train.txt')
+    sess = tf.Session()
+    data = PascalVOCSegmentationDataSet (batch_size=5, index_path=pascalvoc.PASCAL_VOC_PATH + 'raw/train.txt')
     data.load()
 
-    data.shuffle()
-
-    batch, _ = data.batch(5)
-
-    method_list = [AUGMENTATION_METHODS['random_flip_horizontal'], AUGMENTATION_METHODS['random_flip_vertical'], AUGMENTATION_METHODS['random_crop']]
+    batch = data.batch()
+    # method_list = [AUGMENTATION_METHODS['random_flip_horizontal'], AUGMENTATION_METHODS['random_flip_vertical'], AUGMENTATION_METHODS['random_crop']]
     img = batch.x[0]
     label = batch.y[0]
 
@@ -164,13 +163,5 @@ if __name__ == "__main__":
     cv2.imshow("img", decoder.decode(label))
     cv2.waitKey(0)
 
-    batch = dm.data_augment(batch, method_list)
-    img = batch.x[0]
-    label = batch.y[0]
 
-    cv2.imshow("img", img)
-    cv2.waitKey(0)
-
-    cv2.imshow("img", decoder.decode(label))
-    cv2.waitKey(0)
 

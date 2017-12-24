@@ -12,14 +12,14 @@ from PIL import Image
 import cv2
 from scripts.dataprocessing import pascalvoc
 import scripts.dataset as dataset
-import scripts.fcn8s as fcn8
+import scripts.fcn8s_vgg16 as fcn8
 import sqlite3
 
 
 MODEL_PATH = "/home/khanhhung/deeplearning/SemanticSegmentation/data/progress/fcn8s/best/"
 MODEL_NAME = "fcn8s"
 
-IMG_PATH = "/home/khanhhung/deeplearning/SemanticSegmentation/data/assets/Images/2007_000033.jpg"
+IMG_PATH = "/home/khanhhung/deeplearning/SemanticSegmentation/data/assets/Images/2007_001763.jpg"
 
 if __name__ == "__main__":
 
@@ -28,6 +28,7 @@ if __name__ == "__main__":
 
 
     img = cv2.imread(IMG_PATH)
+    img /= 255
     with tf.Session() as sess:
         saver = tf.train.import_meta_graph(MODEL_PATH + MODEL_NAME + '.meta')
         saver.restore(sess, tf.train.latest_checkpoint(MODEL_PATH))

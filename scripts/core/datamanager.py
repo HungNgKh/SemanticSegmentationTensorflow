@@ -44,7 +44,7 @@ class DataSet:
     def shuffle(self):
         pass
 
-    def reset_index(self):
+    def reset(self):
         self._current_index = 0
 
 
@@ -74,16 +74,18 @@ class LoadTimeDataSet(DataSet):
 
     def batch(self):
 
+        if self._current_index >= self.size:
+            return
+
         index_end = self._current_index + self._batch_size
-        if( index_end >= self.size):
+        if index_end >= self.size:
             index_end = self.size
             batch = Batch(self.images[self._current_index : index_end], self.labels[self._current_index : index_end])
-            self._current_index = 0
-            return batch, True
+            return batch
         else:
             batch = Batch(self.images[self._current_index: index_end], self.labels[self._current_index : index_end])
             self._current_index = index_end
-            return batch, False
+            return batch
 
 
 
@@ -156,7 +158,7 @@ class TensorflowDataset:
 
 
 
-    def batch(self, sess = tf.Session()):
+    def batch(self, sess):
         assert sess._closed == False
         imgs, truths =sess.run(self.__batch)
         self.__index += 1
@@ -177,7 +179,7 @@ class TensorflowDataset:
 class NewTFDataset:
 
 
-    def __init__(self, path, batch_size, image_shape, truth_shape, epoch_size, sess = tf.Session()):
+    def __init__(self, path, batch_size, image_shape, truth_shape, epoch_size, sess):
         assert sess._closed == False
         self.path = path
         self.__image_shape = image_shape
@@ -231,7 +233,7 @@ class NewTFDataset:
 
 
 
-    def batch(self, sess = tf.Session()):
+    def batch(self, sess):
         assert sess._closed == False
         try:
             self.__step += 1
@@ -252,7 +254,8 @@ class NewTFDataset:
         return self.__size
 
 
-    def reset(self, sess = tf.Session()):
+    def reset(self, sess ):
+        assert sess._closed == False
         sess.run(self.__iterator.initializer)
 
 

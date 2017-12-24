@@ -9,22 +9,43 @@ import tensorflow.contrib.layers as layer
 
 
 def batch_norm(input, is_training, scope_bn):
-    bn_train = layer.batch_norm(input, decay=0.999, center=True, scale=True,
-                                is_training=True,
-                                updates_collections=None,
-                                reuse=None,
-                                trainable=True,
-                                scope=scope_bn)
+    # bn_train = layer.batch_norm(input, decay=0.999, epsilon=1e-3, center=True, scale=True,
+    #                             is_training=True,
+    #                             updates_collections=None,
+    #                             reuse=None,
+    #                             trainable=True,
+    #                             scope=scope_bn)
+    #
+    # bn_inference = layer.batch_norm(input, decay=0.999, epsilon=1e-3, center=True, scale=True,
+    #                                 is_training=False,
+    #                                 updates_collections=None,
+    #                                 reuse=True,
+    #                                 trainable=True,
+    #                                 scope=scope_bn)
+    #
+    # output = tf.cond(is_training, lambda: bn_train, lambda: bn_inference)
+    # return output
+    with tf.variable_scope(scope_bn):
+        n_output = input.get_shape().as_list()[3]
+        beta = tf.Variable(tf.constant(0.0, shape=[n_output]),
+                           name='beta', trainable=True)
+        gamma = tf.Variable(tf.constant(1.0, shape=[n_output]),
+                            name='gamma', trainable=True)
+        batch_mean, batch_var = tf.nn.moments(input, [0, 1, 2], name='moments')
+        ema = tf.train.ExponentialMovingAverage(decay=0.5)
 
-    bn_inference = layer.batch_norm(input, decay=0.999, center=True, scale=True,
-                                    is_training=False,
-                                    updates_collections=None,
-                                    reuse=True,
-                                    trainable=True,
-                                    scope=scope_bn)
+        def mean_var_with_update():
+            ema_apply_op = ema.apply([batch_mean, batch_var])
+            with tf.control_dependencies([ema_apply_op]):
+                return tf.identity(batch_mean), tf.identity(batch_var)
 
-    output = tf.cond(is_training, lambda: bn_train, lambda: bn_inference)
-    return output
+        mean, var = tf.cond(is_training,
+                            mean_var_with_update,
+                            lambda: (ema.average(batch_mean), ema.average(batch_var)))
+        normed = tf.nn.batch_normalization(input, mean, var, beta, gamma, 1e-3)
+
+
+    return normed
 
 
 def dropout(input, is_training, keep_prob):
@@ -41,20 +62,27 @@ def average_pool(name, input, factor):
     return pool
 
 
-def conv2d(name, input, filter, stride, bias):
-    conv = tf.nn.conv2d(input, filter=filter, strides= [1, stride, stride, 1], padding="SAME")
-    conv = tf.nn.bias_add(conv, bias, name=name)
-    return conv
+def conv2d(name, input, weight_shape, stride, weight_init, GPU_var_device = True, GPU_op_device = True):
+    with tf.device("/GPU:0" if GPU_var_device else "/CPU:0"), tf.variable_scope(name) as scope:
+        weights = tf.get_variable(name='weights', shape=weight_shape, initializer=weight_init)
+        biases = tf.get_variable(name='biases', shape=weight_shape[-1], initializer=tf.zeros_initializer)
+
+    with tf.device("/GPU:0" if GPU_op_device else "/CPU:0"):
+        return tf.nn.bias_add(tf.nn.conv2d(input, filter=weights, strides= [1, stride, stride, 1], padding="SAME"), biases, name=name)
 
 
-def transpose_conv2d(name, input, filter, stride, bias, output_shape):
+def transpose_conv2d(name, input, weight_shape, stride, output_shape, GPU_var_device = True, GPU_op_device = True):
     if output_shape is None:
         output_shape = input.get_shape().as_list()
         output_shape[1] *= (output_shape[1] - 1) * stride + 1
         output_shape[2] *= (output_shape[2] - 1) * stride + 1
-    conv = tf.nn.conv2d_transpose(input, filter, output_shape, strides=[1, stride, stride, 1], padding="SAME")
-    conv = tf.nn.bias_add(conv, bias, name=name)
-    return conv
+
+    with tf.device("/GPU:0" if GPU_var_device else "/CPU:0"), tf.variable_scope(name) as scope:
+        weights = get_bilinear_filter(weight_shape, upscale_factor=stride, name='weights')
+
+    with tf.device("/GPU:0" if GPU_op_device else "/CPU:0"):
+        return tf.nn.conv2d_transpose(input, filter=weights, output_shape=output_shape, strides=[1, stride, stride, 1], padding="SAME", name=name)
+
 
 
 def hinge_loss(pred, labels):
@@ -70,6 +98,29 @@ def hinge_loss(pred, labels):
     return final_loss
 
 
+def get_bilinear_filter(filter_shape, upscale_factor, name):
+    ##filter_shape is [width, height, num_in_channels, num_out_channels]
+    kernel_size = filter_shape[1]
+    ### Centre location of the filter for which value is calculated
+    if kernel_size % 2 == 1:
+        centre_location = upscale_factor - 1
+    else:
+        centre_location = upscale_factor - 0.5
 
+    bilinear = np.zeros([filter_shape[0], filter_shape[1]])
+    for x in range(filter_shape[0]):
+        for y in range(filter_shape[1]):
+            ##Interpolation Calculation
+            value = (1 - abs((x - centre_location) / upscale_factor)) * (1 - abs((y - centre_location) / upscale_factor))
+            bilinear[x, y] = value
+    weights = np.zeros(filter_shape)
+    for i in range(filter_shape[2]):
+        weights[:, :, i, i] = bilinear
+    init = tf.constant_initializer(value=weights,
+                                   dtype=tf.float32)
+
+    bilinear_weights = tf.get_variable(name=name, initializer=init,
+                                       shape=weights.shape)
+    return bilinear_weights
 
 

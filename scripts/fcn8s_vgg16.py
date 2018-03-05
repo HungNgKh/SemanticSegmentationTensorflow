@@ -58,14 +58,14 @@ def __build():
     relu6 = tf.nn.relu(conv6, name='relu6')
     drop6 = nn.dropout(relu6, train_phase, 0.6)
 
-    conv7 = nn.conv2d('conv7', drop6, [1, 1, 4096, 4096], 1, tf.truncated_normal_initializer(stddev=1e-3), True, True)
+    conv7 = nn.conv2d('conv7', drop6, [1, 1, 4096, 4096], 1, tf.truncated_normal_initializer(stddev=1e-3), False, False)
     relu7 = tf.nn.relu(conv7, name='relu7')
     drop7 = nn.dropout(relu7, train_phase, 0.6)
 
     score_fr = nn.conv2d('score_fr', drop7, [1, 1, 4096, dataset.NUM_CLASS], 1, tf.truncated_normal_initializer(stddev=1e-3), True, True)
     relu_score_fr = tf.nn.relu(score_fr, name='relu_score_fr')
 
-    score_pool4 = nn.conv2d('score_pool4', pretrained_vgg16.pool4, [1, 1, 512, dataset.NUM_CLASS], 1, tf.zeros_initializer, True, False)
+    score_pool4 = nn.conv2d('score_pool4', pretrained_vgg16.pool4, [1, 1, 512, dataset.NUM_CLASS], 1, tf.zeros_initializer, True, True)
     upscore_fr = nn.transpose_conv2d('upscore_fr', relu_score_fr, [4, 4, dataset.NUM_CLASS, dataset.NUM_CLASS], 2, tf.shape(score_pool4), True, True)
     fuse_pool4 = tf.add(score_pool4, upscore_fr, name='fuse_pool4')
 
@@ -134,9 +134,9 @@ def load(sess):
             return 0
 
     if os.path.exists(TRAINING_MODEL_PATH + MODEL_NAME + '.meta'):
-        new_saver = tf.train.new_saver = tf.train.import_meta_graph(TRAINING_MODEL_PATH  + MODEL_NAME + '.meta')
+        new_saver = tf.train.import_meta_graph(TRAINING_MODEL_PATH  + MODEL_NAME + '.meta')
         new_saver.restore(sess, tf.train.latest_checkpoint(TRAINING_MODEL_PATH))
-        return new_saver, trained_epoch_num()
+        return tf.train.Saver(tf.global_variables()), trained_epoch_num()
 
     else:
         print "Model not found!"

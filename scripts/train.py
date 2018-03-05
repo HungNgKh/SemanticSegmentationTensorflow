@@ -4,13 +4,14 @@ import fcn8s_vgg16
 import scipy.io
 import tensorflow as tf
 import dataset
-import os
+import os, cv2
 import numpy as np
+from dataprocessing import pascalvoc
 
 
 
 BATCH_SIZE = 5
-EPOCH_NUM = 100
+EPOCH_NUM = 2000
 
 START_MOMENTUM = 0.5
 MAX_MOMENTUM = 0.9
@@ -123,6 +124,9 @@ if __name__ == "__main__":
         dataset.AUGMENTATION_METHODS['random_crop']
     ]
 
+    predict = tf.squeeze(tf.argmax(trainer.output, 3))
+
+    saver = tf.train.Saver()
     for i in range(EPOCH_NUM):
         print ("\n==========================================================")
         print ("Trained step : " + str(trainer.step) + ", training progress...")
@@ -135,6 +139,7 @@ if __name__ == "__main__":
         print ("Mean accuracy = " + "{:.6f}".format(result['mean_accuracy']))
         print ("Mean IU = " + "{:.6f}".format(result['meanIU']))
         print ("Train time = " + str(result['train_time']) + " s")
+
 
         print ("--------------------------------------------------")
         print ("Validation progress...")
@@ -160,10 +165,11 @@ if __name__ == "__main__":
         logger.log_sumary(val_result['variable_log'], trainer.epoch_step, fcn8s_vgg16.PATH + fcn8s_vgg16.MODEL_NAME + '/validationlog', trainer.session.graph)
 
 
+
         better = better_performance(val_result)
-        trainer.saver.save(trainer.session, fcn8s_vgg16.TRAINING_MODEL_PATH + fcn8s_vgg16.MODEL_NAME, write_meta_graph=False)
+        saver.save(trainer.session, fcn8s_vgg16.TRAINING_MODEL_PATH + fcn8s_vgg16.MODEL_NAME, write_meta_graph=True)
         if better == True:
-            trainer.saver.save(trainer.session, fcn8s_vgg16.BEST_MODEL_PATH + fcn8s_vgg16.MODEL_NAME, write_meta_graph=False)
+            saver.save(trainer.session, fcn8s_vgg16.BEST_MODEL_PATH + fcn8s_vgg16.MODEL_NAME, write_meta_graph=True)
 
         if trainer.epoch_step % MOMENTUM_UP_EPOCH_STEP == 0:
             momentum = min(momentum + MOMENTUM_INCREASE, MAX_MOMENTUM)
